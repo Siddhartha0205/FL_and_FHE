@@ -2,7 +2,11 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+from sklearn.metrics import confusion_matrix
 import flwr as fl
+import sys
+import matplotlib.pyplot as plt
+
 
 #Declaration of certain variables used for plots
 eval_accuracy = []
@@ -118,5 +122,27 @@ fl.client.start_numpy_client(
         client = FlowerClient(), 
         grpc_max_message_length = 1024*1024*1024
 )
+
+#code snippet for confusion matrix
+y1_pred = dbp1_model.predict(X_test)
+#print(y1_pred)
+
+y1_pred_labels = (y1_pred[:, 1] >= 0.51).astype(int)
+confusion_client1 = confusion_matrix(y_test, y1_pred_labels)
+print('Confusion Matrix:')
+print(confusion_client1)
+
+#plotting the model performance
+x_points = np.array(range(1, len(np.array(eval_accuracy))+1))
+y_points1 = np.array(eval_accuracy)
+y_points2 = np.array(eval_loss)
+
+plt.plot(x_points, y_points1, color = 'green', label = 'Eval Accuracy')
+plt.plot(x_points, y_points2, color = 'blue', label = 'Eval Loss')
+plt.legend()
+plt.title("Model Evaluation Metrics plot - client 1")
+plt.xlabel("Number of FL rounds -->")
+plt.ylabel("Accuracy and Loss metrics of the Model -->")
+plt.show()
 
 del dbp1_model

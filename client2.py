@@ -2,7 +2,10 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+from sklearn.metrics import confusion_matrix
 import flwr as fl
+import sys
+import matplotlib.pyplot as plt
 
 #Declaration of certain variables
 eval_accuracy = []
@@ -13,6 +16,7 @@ df = pd.read_csv('dataset_abnormal_client2.csv')
 
 #setting up the global seed to control the randomness                                                     
 tf.random.set_seed(42)
+
 
 # DATA PREPROCESSING
 
@@ -100,7 +104,6 @@ class FlowerClient(fl.client.NumPyClient):
     
         #The evaluate function receives aggregated parameters from the server and we set those parameters and evaluate the model        
         dbp2_model.set_weights(parameters)
-        
         loss, accuracy = dbp2_model.evaluate(X_test, y_test, verbose=0)
         
         #Saving the evaluation values for plotting                             
@@ -118,5 +121,28 @@ fl.client.start_numpy_client(
         client = FlowerClient(), 
         grpc_max_message_length = 1024*1024*1024
 )
+
+
+#code snippet for confusion matrix
+y1_pred = dbp2_model.predict(X_test)
+#print(y1_pred)
+
+y1_pred_labels = (y1_pred[:, 1] >= 0.5).astype(int)
+confusion_client2 = confusion_matrix(y_test, y1_pred_labels)
+print('Confusion Matrix:')
+print(confusion_client2)
+
+#plotting the model performance
+x_points = np.array(range(1, 11))
+y_points1 = np.array(eval_accuracy)
+y_points2 = np.array(eval_loss)
+
+plt.plot(x_points, y_points1, color = 'green', label = 'Eval Accuracy')
+plt.plot(x_points, y_points2, color = 'blue', label = 'Eval Loss')
+plt.legend()
+plt.title("Model Evaluation Metrics plot - client 2")
+plt.xlabel("Number of FL rounds -->")
+plt.ylabel("Accuracy and Loss metrics of the Model -->")
+plt.show()
 
 del dbp2_model
