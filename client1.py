@@ -6,9 +6,11 @@ from sklearn.metrics import confusion_matrix
 import flwr as fl
 import sys
 import matplotlib.pyplot as plt
+import encryption as encr
+import aggregator as aggr
 
 
-#Declaration of certain variables used for plots
+#Declaration of certain variables
 eval_accuracy = []
 eval_loss = []
 
@@ -37,7 +39,6 @@ Y = df_aggregated['abnormality']
 
 # Split data into training and testing sets
 from sklearn.model_selection import train_test_split
-
 X_train, X_valid, y_train, y_valid = train_test_split(X, Y, train_size=0.8)
 
 # Scale input features
@@ -48,7 +49,7 @@ X_train = scaler.transform(X_train)
 
 X1_row, X1_col = np.shape(X_train)
 
-#Building the neural network model
+#Building the model
 dbp1_model = tf.keras.models.Sequential([
     keras.layers.Flatten(input_shape=(X1_col,)),
     keras.layers.Dense(16, activation='relu'),
@@ -65,7 +66,6 @@ initial_weights_filename = "initial_weights_client1_1.h5"
 dbp1_model.load_weights(initial_weights_filename)
 
 #Loading the test dataset
-#Here client2 training dataset is used as testing dataset for client1
 df_test = pd.read_csv('dataset_abnormal_client2.csv')
 
 df_test_removed = df_test.drop(columns=['time', 'yaw', 'heading', 'location_x', 'location_y', 'gnss_latitude', 'gnss_longitude', 'gyroscope_x', 'gyroscope_y', 'height', 'reverse', 'hand_brake', 'manual_gear_shift', 'gear'])
@@ -88,7 +88,7 @@ class FlowerClient(fl.client.NumPyClient):
         return dbp1_model.get_weights()
 
     def fit(self, parameters, config):
-    
+        
         dbp1_model.set_weights(parameters)
         
         r1 = dbp1_model.fit(X_train, y_train, batch_size= len(X_train), epochs = 5, validation_data = (X_valid, y_valid), verbose=0)
@@ -98,12 +98,79 @@ class FlowerClient(fl.client.NumPyClient):
         #print("Size of weights in client1 in bytes: ", sys.getsizeof(dbp1_model.get_weights()))
         #print(type(dbp1_model.get_weights()))
         
+        #Storing the shape of weights arrays of the model
+        #for arr in dbp1_model.get_weights():
+        #    print("The shape of model weights: ", np.shape(arr))
+        
+        #print("2 - The shape of model weights: ", len(dbp1_model.get_weights()))
+        
+        #Adding encryption layer for dbp1_model.get_weights() and then send them for aggregation
+        
+        #Checking if the encryption is necessary based on the boolean variable 'encryption_needed' from encryption.py file
+        if encr.Enc_needed.encryption_needed.value:
+        
+            params_encrypted = []
+            
+            print("Entering encryption phase - Client1")
+            params_encrypted_list_1 = encr.param_encrypt(dbp1_model.get_weights(), 'Client1')
+            print("Exiting encryption phase - Client1")
+            
+            #Appending the encrypted data to a list. Here a loop is introduced to access the elements from list variable 'param_encrypted_list_1'  
+            for i in range(0, 514):
+                params_encrypted.append(params_encrypted_list_1[i])
+                
+            print("Entering aggregation phase - Client1")
+            global weights1
+            
+            #The encrypted weights undergo aggregation in aggregator.py file and returns the new aggregated weights 
+            weights1 = aggr.user_aggregator()
+            #print('weights in fit method: ', weights1)
+            print("Exiting aggregation phase - Client1")
+            
+        else:
+            
+            params_encrypted = dbp1_model.get_weights()    
+            
         return dbp1_model.get_weights(), len(X_train), {}
 
     def evaluate(self, parameters, config):
-    
-        #The evaluate function receives aggregated parameters from the server and we set those parameters and evaluate the model
-        dbp1_model.set_weights(parameters)
+        
+        #Checking if the decryption is necessary based on the boolean variable 'encryption_needed' from encryption.py file
+        if encr.Enc_needed.encryption_needed.value:
+                        
+            print("Entering decryption phase - Client1")            
+            params_decrypted1 = encr.param_decrypt(weights1, 'Client1')
+            print("Exiting decryption phase - Client 1")
+            
+            #The parameters are needed to be reshaped to original as they are flattened during encryption and aggregation
+            
+            # List to store the reshaped arrays
+            reshaped_params = []
+
+            # Define the shapes of the original arrays
+            shapes = [np.shape(arr) for arr in parameters]
+
+            # Variable to keep track of the current index in the data
+            current_index = 0
+
+            # Reshape the data and split it into individual arrays
+            for shape in shapes:
+                data_result = []
+                size = np.prod(shape)
+                                    
+                reshaped_arr = np.reshape(params_decrypted1[current_index:current_index + size], shape)
+                #print(reshaped_arr)
+                reshaped_params.append(reshaped_arr)
+                current_index += size
+
+            #print('reshaped params of client1: ', reshaped_params)
+            
+            #Using the reshaped aggregated parameters to evaluate model performance
+            dbp1_model.set_weights(reshaped_params)
+            
+        else:
+            
+            dbp1_model.set_weights(parameters)
         
         loss, accuracy = dbp1_model.evaluate(X_test, y_test, verbose=0)
         
@@ -111,7 +178,8 @@ class FlowerClient(fl.client.NumPyClient):
         eval_accuracy.append(accuracy)
         
         #Saving the loss values for plotting
-        eval_loss.append(loss)        
+        eval_loss.append(loss)
+        
         #print("Eval accuracy : ", accuracy)
         
         return loss, len(X_test), {"accuracy": accuracy}
@@ -134,6 +202,7 @@ print(confusion_client1)
 
 #plotting the model performance
 x_points = np.array(range(1, len(np.array(eval_accuracy))+1))
+print('Client1 - eval accuracy list:', eval_accuracy)
 y_points1 = np.array(eval_accuracy)
 y_points2 = np.array(eval_loss)
 
