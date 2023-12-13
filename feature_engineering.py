@@ -22,9 +22,9 @@ def engineer_features(dataframe):
     # Calculate overall acceleration magnitude from the rows of all accelerometer axes
     acceleration_magnitude_rows = []
     
-    for row in range(0, 23):
+    for row in range(0, 25):
         magnitude_row = []
-        for element in range(0, 138):
+        for element in range(0, 150):
             magnitude = math.sqrt(pow(accelerometer_x_rows[row][element], 2) + pow(accelerometer_y_rows[row][element], 2) + pow(accelerometer_z_rows[row][element], 2))
             magnitude_row.append(magnitude)
         acceleration_magnitude_rows.append(magnitude_row)
